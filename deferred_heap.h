@@ -411,6 +411,24 @@ namespace gcpp {
 			return p;
 		}
 
+		//------------------------------------------------------------------------
+		// get_ptr_to: Get a deferred_ptr<T> of this memory managed by the heap
+		//
+		// Given a pointer supposedly managed by the heap, get a deferred_ptr<T>
+		// to the same memory. Checks if it's resident and return null, otherwise.
+		template <class T>
+		deferred_ptr<T> get_deferred_ptr_to(T* p)
+		{
+			auto page = find_dhpage_of(p);
+			Expects(page && "The given pointer was not managed by this heap.");
+			if (!page)
+			{
+				return nullptr;
+			}
+
+			return { this, p };
+		}
+
 	private:
 		//------------------------------------------------------------------------
 		//
