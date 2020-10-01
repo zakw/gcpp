@@ -189,6 +189,46 @@ namespace gcpp {
 		//	pointer becomes unattached when the heap it was attached to is destroyed.
 		//
 		class deferred_ptr_void {
+		public:
+
+			class refancy_proxy
+			{
+			public:
+				refancy_proxy() : p(nullptr) {};
+				~refancy_proxy() = default;
+				refancy_proxy& operator=(const refancy_proxy& that) = default;
+
+				operator bool() const { return nullptr != p; }
+
+				// Everything is deliberately private so only deferred_ptr can manipulate.
+			private:
+				friend class deferred_ptr_void;
+
+				refancy_proxy(void* p_) : p(p_)
+				{}
+
+				void* p;
+			};
+
+			deferred_ptr_void& operator=(const refancy_proxy& that) noexcept {
+				// Check that the new desired pointer is in our heap.
+				Expects(get_heap()->find_dhpage_of(that.p)
+					&& "The pointer we're attempting to reference doesn't belong to our heap.");
+
+				p = that.p;
+
+				return *this;
+			}
+
+		protected:
+
+			// Only deferred_ptrs should be able to create these.
+			static refancy_proxy create_refancy_proxy(void* p) {
+				return refancy_proxy(p);
+			}
+
+		private:
+
 			//	There are other ways to implement this, including to make deferred_ptr
 			//	be the same size as an ordinary pointer and trivially copyable; one
 			//	alternative implementation checked in earlier did that.
@@ -206,15 +246,17 @@ namespace gcpp {
 			//	presentation from the central concepts that are actually important.
 			deferred_heap* myheap;
 			void* p;
+			refancy_proxy refancy_proxy_;
 
 			friend deferred_heap;
 
 		protected:
 			void  set(void* p_) noexcept { p = p_; }
 
-			deferred_ptr_void(deferred_heap* heap = nullptr, void* p_ = nullptr)
+			deferred_ptr_void(deferred_heap* heap = nullptr, void* p_ = nullptr, refancy_proxy refancy = refancy_proxy())
 				: myheap{ heap }
 				, p{ p_ }
+				, refancy_proxy_(refancy)
 			{
 				//	Allow null pointers, we'll set the page on the first assignment
 				Expects((p == nullptr || myheap != nullptr) && "heap cannot be null for a non-null pointer");
@@ -230,24 +272,36 @@ namespace gcpp {
 			}
 
 			deferred_ptr_void(const deferred_ptr_void& that)
-				: deferred_ptr_void(that.myheap, that.p)
+				: deferred_ptr_void(that.myheap, that.p, that.refancy_proxy_)
+			{}
+
+			deferred_ptr_void(const refancy_proxy& that)
+				: myheap(nullptr)
+				, p(nullptr)
+				, refancy_proxy_(that)
 			{ }
 
 			deferred_ptr_void& operator=(const deferred_ptr_void& that) noexcept {
-				//	Allow assignment from an unattached null pointer
-				if (that.myheap == nullptr) {
-					Expects(that.p == nullptr && "unattached deferred_ptr must be null");
-					reset();	// just to keep the nulling logic in one place
+				if (that.refancy_proxy_) {
+					Expects(!that.get_heap() && !that.get() && "If we're refancy-ing, there shouldn't be anything else set.");
+					*this = that.refancy_proxy_;
 				}
-
-				//	Otherwise, we must be unattached or pointing into the same heap
 				else {
-					Expects((myheap == nullptr || myheap == that.myheap)
-						&& "cannot assign deferred_ptrs into different deferred_heaps");
-					p = that.p;
-					if (myheap == nullptr) {
-						that.myheap->enregister(*this);	// perform lazy attach
-						myheap = that.myheap;
+					//	Allow assignment from an unattached null pointer
+					if (that.myheap == nullptr) {
+						Expects(that.p == nullptr && "unattached deferred_ptr must be null");
+						reset();	// just to keep the nulling logic in one place
+					}
+
+					//	Otherwise, we must be unattached or pointing into the same heap
+					else {
+						Expects((myheap == nullptr || myheap == that.myheap)
+							&& "cannot assign deferred_ptrs into different deferred_heaps");
+						p = that.p;
+						if (myheap == nullptr) {
+							that.myheap->enregister(*this);	// perform lazy attach
+							myheap = that.myheap;
+						}
 					}
 				}
 
@@ -477,6 +531,11 @@ namespace gcpp {
 			return *this;
 		}
 
+		// Handling refancy-ing from pointer_to()
+		deferred_ptr(const refancy_proxy& that)
+			: deferred_ptr_void(that)
+		{}
+
 		//	Aliasing conversion: Type-safely forming a pointer to data member of T of type U.
 		//	Thanks to Casey Carter and Jon Caves for helping get this incantation right.
 		//
@@ -513,8 +572,8 @@ namespace gcpp {
 		}
 
 		template<class U>
-		static deferred_ptr<U> pointer_to(U& u) {
-			return deferred_ptr<U>(&u);
+		static typename deferred_ptr<U>::refancy_proxy pointer_to(U& u) {
+			return deferred_ptr<U>::create_refancy_proxy((void*)&u);
 		}
 
 		int compare3(const deferred_ptr& that) const { return get() < that.get() ? -1 : get() == that.get() ? 0 : 1; };
@@ -652,6 +711,10 @@ namespace gcpp {
 
 			return get() - that.get();
 		}
+
+		private:
+		// Used as an incremental step for pointer_to() refancy-ing.
+		refancy_proxy refancy_proxy_;
 	};
 
 	//	Specialize void just to get rid of the void& return from operator*

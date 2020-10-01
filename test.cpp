@@ -443,6 +443,27 @@ void test_bitflags() {
 	//flags.debug_print();
 }
 
+void test_pointer_to()
+{
+	deferred_heap heap;
+
+	{
+		deferred_vector<widget> v(heap);
+
+		v.push_back(42);
+		v.push_back(60221476);
+
+		auto first = v.begin();
+		auto foundIter = std::find(first, v.end(), 42);
+
+		Expects(first == foundIter);
+		Expects(42 == foundIter->v);
+	}
+
+	heap.collect();
+	heap.debug_print();
+}
+
 
 int main() {
 	//test_page();
@@ -460,6 +481,8 @@ int main() {
 	//time_deferred_allocator_vector();
 
 	//test_deferred_array();
+
+	test_pointer_to();
 
 	//heap.collect();
 	//heap.debug_print();
