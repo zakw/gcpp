@@ -58,8 +58,6 @@ struct widget {
 #endif
 	}
 
-	operator long() const { return v; }
-
 	int compare3(const widget& that) const { return v < that.v ? -1 : v == that.v ? 0 : 1; };
 	GCPP_TOTALLY_ORDERED_COMPARISON(widget);	// maybe someday this will be default
 };
@@ -249,9 +247,9 @@ void test_deferred_allocator_set() {
 	heap.collect();
 	heap.debug_print();	// the erased node is still there, because i kept it alive
 
-	cout << "i -> (" << *i << ")\n";	// i points to 1
+	cout << "i -> (" << i->v << ")\n";	// i points to 1
 	++i;								// navigate -- to node that used to be the right child
-	cout << "i -> (" << *i << ")\n";	// which is 2, we've navigated back into the tree
+	cout << "i -> (" << i->v << ")\n";	// which is 2, we've navigated back into the tree
 
 	i = s.begin();	// now make the iterator point back into the container, making the erased node unreachable
 
