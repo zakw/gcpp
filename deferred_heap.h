@@ -15,6 +15,9 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
+// HACK: do not push. Disable warning spew for this and all downstream consumers.
+#pragma warning (disable : 4267)
+#pragma warning (disable : 4244)
 
 #ifndef GCPP_DEFERRED_HEAP
 #define GCPP_DEFERRED_HEAP
